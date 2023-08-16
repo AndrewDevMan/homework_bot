@@ -32,7 +32,7 @@ HOMEWORK_VERDICTS = {
 
 def check_tokens() -> bool:
     """Проверяет доступность переменных окружения."""
-    logger.info('Проверка наличия токенов')
+    logger.debug('Проверка наличия токенов')
     return all((PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID))
 
 
@@ -49,6 +49,7 @@ def send_message(bot: telegram.Bot, message: str) -> None:
 
 def get_api_answer(timestamp: int) -> dict:
     """Делает запрос к эндпоинту API-сервиса."""
+    HEADERS['Accept'] = 'application/json'
     request_param = {
         'url': ENDPOINT,
         'headers': HEADERS,
@@ -59,6 +60,13 @@ def get_api_answer(timestamp: int) -> dict:
     )
     try:
         homework_statuses = requests.get(**request_param)
+    except requests.RequestException as e:
+        logger.error(
+            f'Ошибка при запросе к API: {e}'
+            '{url}, {headers}, {params}'.format(**request_param),
+            exc_info=True,
+        )
+    else:
         if homework_statuses.status_code != HTTPStatus.OK:
             msg_error = (
                 f'Эндпоинт не доступен'
@@ -68,12 +76,6 @@ def get_api_answer(timestamp: int) -> dict:
             raise BadStatusCodeResponse(msg_error)
         logger.debug('Ответ от API получен')
         return homework_statuses.json()
-    except requests.RequestException as e:
-        logger.error(
-            f'Ошибка при запросе к API: {e}'
-            '{url}, {headers}, {params}'.format(**request_param),
-            exc_info=True,
-        )
 
 
 def check_response(response: dict) -> list:
@@ -93,12 +95,11 @@ def check_response(response: dict) -> list:
 
 def parse_status(homework: dict) -> str:
     """Извлекает статус домашней работы."""
-    if 'homework_name' not in homework:
-        msg_error = 'В ответе нет ключа "homework_name"'
-        logger.error(msg_error)
-        raise KeyError(msg_error)
-    homework_name = homework.get('homework_name')
-    homework_status = homework.get('status')
+    try:
+        homework_name = homework['homework_name']
+        homework_status = homework['status']
+    except KeyError as e:
+        logger.error(f'В ответе нет запрашиваемого ключа - {e}', exc_info=True)
     if homework_status not in HOMEWORK_VERDICTS:
         msg_error = 'Недокументированный статус домашней работы'
         logger.error(msg_error)
@@ -112,9 +113,9 @@ def main():
     if not check_tokens():
         logger.critical('Отсутствуют обязательные токены,'
                         'работа бота будет завершина.')
-        sys.exit()
+        return
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
-    timestamp = int(time.time())
+    timestamp = 0
     previous_message = ''
     send_message(bot, '"Бот начал работу"')
 
