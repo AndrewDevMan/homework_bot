@@ -13,7 +13,6 @@ from exceptions import BadStatusCodeResponse, InvalidData
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
@@ -28,6 +27,17 @@ HOMEWORK_VERDICTS = {
     'reviewing': 'Работа взята на проверку ревьюером.',
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
+
+
+def logger_setup() -> None:
+    """Настройка логгера."""
+    logger.setLevel(logging.INFO)
+    handler = logging.StreamHandler(stream=sys.stdout)
+    formatter = logging.Formatter(
+        '%(name)s - %(asctime)s - %(levelname)s - %(message)s'
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 
 def check_tokens() -> bool:
@@ -99,13 +109,16 @@ def parse_status(homework: dict) -> str:
         homework_name = homework['homework_name']
         homework_status = homework['status']
     except KeyError as e:
-        logger.error(f'В ответе нет запрашиваемого ключа - {e}', exc_info=True)
+        msg_error = f'В ответе нет запрашиваемого ключа - {e}'
+        logger.error(msg_error, exc_info=True)
+        raise KeyError(msg_error)
     if homework_status not in HOMEWORK_VERDICTS:
         msg_error = 'Недокументированный статус домашней работы'
         logger.error(msg_error)
         raise InvalidData(msg_error)
-    verdict = HOMEWORK_VERDICTS[homework_status]
-    return f'Изменился статус проверки работы "{homework_name}". {verdict}'
+    else:
+        verdict = HOMEWORK_VERDICTS[homework_status]
+        return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
 def main():
@@ -113,7 +126,7 @@ def main():
     if not check_tokens():
         logger.critical('Отсутствуют обязательные токены,'
                         'работа бота будет завершина.')
-        return
+        return None
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     timestamp = 0
     previous_message = ''
@@ -135,7 +148,8 @@ def main():
             else:
                 logger.info(message)
 
-        except Exception as error:
+        except (telegram.TelegramError, KeyError, TypeError, InvalidData,
+                BadStatusCodeResponse, requests.RequestException) as error:
             message = f'Сбой в работе программы: {error}'
             logger.error(message, exc_info=True)
 
@@ -144,11 +158,5 @@ def main():
 
 
 if __name__ == '__main__':
-    logger.setLevel(logging.INFO)
-    handler = logging.StreamHandler(stream=sys.stdout)
-    formatter = logging.Formatter(
-        '%(name)s - %(asctime)s - %(levelname)s - %(message)s'
-    )
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+    logger_setup()
     main()
