@@ -76,6 +76,7 @@ def get_api_answer(timestamp: int) -> dict:
             '{url}, {headers}, {params}'.format(**request_param),
             exc_info=True,
         )
+        raise InvalidData(e)
     else:
         if homework_statuses.status_code != HTTPStatus.OK:
             msg_error = (
